@@ -1,0 +1,24 @@
+
+- program: joypad_wiper
+    - pthread: read/ioctl /dev/input/js0
+    - mutex: buttons
+    - main:
+        - read/write /dev/gpio_stream
+            - Actuator is motor: STOP, FOREWARD, BACKWARD
+            - Sensors:
+                - Motor park switch: shorted when in park state, backward limit
+                - external limit switch: shorted when in max state, forward limit
+
+
+
+- program: joypad_node
+    - read/ioctl /dev/input/js0
+    - czmq publisher: send buttons
+
+- program: wiper_node
+    - pthread: 
+        - czmq subscriber: receive buttons
+    - mutex: cmd
+    - main: read/write /dev/gpio_stream
+            
+  
