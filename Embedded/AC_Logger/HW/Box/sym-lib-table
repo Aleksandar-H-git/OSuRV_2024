@@ -1,4 +1,0 @@
-(sym_lib_table
-  (lib (name "Local_Relays")(type "KiCad")(uri "${KIPRJMOD}/Local_Symbols/Local_Relays.kicad_sym")(options "")(descr ""))
-  (lib (name "Box-cache")(type "Legacy")(uri "${KIPRJMOD}/Box-cache.lib")(options "")(descr ""))
-)

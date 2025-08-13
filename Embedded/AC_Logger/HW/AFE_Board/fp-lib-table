@@ -1,4 +1,0 @@
-(fp_lib_table
-  (lib (name Local_Modules)(type KiCad)(uri ${KIPRJMOD}/Local_Modules.pretty)(options "")(descr ""))
-  (lib (name For_Rasterboard)(type KiCad)(uri ${KIPRJMOD}/../../../../Common/HW/For_Rasterboard.pretty)(options "")(descr ""))
-)

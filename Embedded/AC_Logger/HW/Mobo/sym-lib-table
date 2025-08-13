@@ -1,3 +1,0 @@
-(sym_lib_table
-  (lib (name Extra_Common)(type KiCad)(uri ${KIPRJMOD}/../../../../Common/HW/Extra_Common.kicad_sym)(options "")(descr ""))
-)

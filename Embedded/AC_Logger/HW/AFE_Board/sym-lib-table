@@ -1,3 +1,0 @@
-(sym_lib_table
-  (lib (name "AFE_Board-cache")(type "Legacy")(uri "${KIPRJMOD}/AFE_Board-cache.lib")(options "")(descr ""))
-)

@@ -1,6 +1,0 @@
-build/
-.waf*/
-waf3*/
-.lock-waf*
-*.tsv
-*.pvsm

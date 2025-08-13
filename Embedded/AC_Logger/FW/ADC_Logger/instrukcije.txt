@@ -1,2 +1,0 @@
-iz nekog razloga, kada pipnem sasiju od usb porta na arduinu, on povuce citanje voltaze sa random vrednosti na 0(dok nije povezan na nesto sto simulira napon)
-kada mu dovedem 5v i spojim 0v sa uzemljenjem, shortuje
