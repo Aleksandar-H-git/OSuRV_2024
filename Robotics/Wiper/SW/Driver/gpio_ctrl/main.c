@@ -1,153 +1,188 @@
-#include <fcntl.h>
-#include <stdio.h>
-#include <unistd.h>
-#include <linux/joystick.h>
-#include <sys/ioctl.h>
-#include <pthread.h>
-#include <errno.h>
-#include <stdlib.h>
+
+#include <linux/module.h> // module_init(), module_exit()
+#include <linux/fs.h> // file_operations
+#include <linux/errno.h> // EFAULT
+#include <linux/uaccess.h> // copy_from_user(), copy_to_user()
+
+MODULE_LICENSE("Dual BSD/GPL");
+
 
 #include "include/gpio_ctrl.h"
 #include "gpio.h"
 
-int gpio_write(int fd, uint8_t pin, uint8_t value) {
-    gpio_ctrl__stream_pkg_t pkg = {
-        .gpio_no = pin,
-        .op = GPIO_CTRL__WRITE,
-        .wr_val = value
-    };
-    if (write(fd, &pkg, 3) != 3) {
-        perror("Failed to write to GPIO");
-        return -1;
-    }
-    return 0;
-}
-#define SERVO_PIN 18        // GPIO pin (2-26); adjust as needed
-#define PWM_PERIOD_US 20000 // 20ms (50Hz for servo)
-#define MIN_PULSE_US 1000   // 1ms for 0°
-#define MAX_PULSE_US 2000   // 2ms for 180°
-#define ANGLE_STEP 10       // Degrees to change per button press
-#define BUTTON_CW 0         // Button index for clockwise (increase angle)
-#define BUTTON_CCW 1        // Button index for counterclockwise (decrease angle)
 
-struct js_event js_event_data;
-volatile int ready = 0;
-volatile int done = 0; // Flag to indicate reader thread termination
-pthread_mutex_t mtx = PTHREAD_MUTEX_INITIALIZER;
-pthread_cond_t cond = PTHREAD_COND_INITIALIZER;
-
-void* js_reader(void* arg) {
-    int js_fd;
-    int num_of_axes = 0;
-    int num_of_buttons = 0;
-
-    // Open the joystick device file in read-only mode
-    js_fd = open("/dev/input/js0", O_RDONLY);
-    if (js_fd == -1) {
-        perror("Error opening joystick device");
-        pthread_mutex_lock(&mtx);
-        done = 1;
-        pthread_cond_signal(&cond);
-        pthread_mutex_unlock(&mtx);
-        return NULL;
-    }
-
-    ioctl(js_fd, JSIOCGAXES, &num_of_axes);
-    ioctl(js_fd, JSIOCGBUTTONS, &num_of_buttons);
-
-    while (1) {
-        if (read(js_fd, &js_event_data, sizeof(struct js_event)) != sizeof(struct js_event)) {
-            perror("Error reading joystick event");
-        	pthread_mutex_lock(&mtx);
-            done = 1; 
-            pthread_cond_signal(&cond);
-            pthread_mutex_unlock(&mtx);
-            break;
-        }
-		pthread_mutex_lock(&mtx);
-        ready = 1;
-        pthread_cond_signal(&cond);
-        pthread_mutex_unlock(&mtx);
-    }
-
-    close(js_fd);
-    return NULL;
+static int gpio_stream_open(struct inode *inode, struct file *filp) {
+	return 0;
 }
 
-int main() {
-
-    int angle = 90;
-    // Open GPIO device
-    int gpio_fd = open(DEV_STREAM_FN, O_RDWR);
-    printf("Controlling servo on GPIO %d... Press Ctrl+C to exit.\n", SERVO_PIN);
-
-    if (gpio_fd < 0) {
-        perror("Failed to open /dev/gpio_stream");
-        return EXIT_FAILURE;
-    }
-    pthread_t reader;
-
-
-	pthread_create(&reader, NULL, js_reader, NULL);
-
-    while (1) {
-        pthread_mutex_lock(&mtx);
-        while (!ready && !done) {
-            pthread_cond_wait(&cond, &mtx);
-        }
-
-        if (done) {
-            pthread_mutex_unlock(&mtx);
-            break;
-        }
-
-        if (ready) {
-            if (js_event_data.type & JS_EVENT_BUTTON) {
-                printf("Button %d %s (value: %d)\n",
-                    js_event_data.number,
-                    (js_event_data.value == 0) ? "released" : "pressed",
-                    js_event_data.value);
-            } else if (js_event_data.type & JS_EVENT_AXIS) {
-                printf("Axis %d moved (value: %d)\n",
-                    js_event_data.number,
-                    js_event_data.value);
-            } else if (js_event_data.type & JS_EVENT_INIT) {
-                printf("Initial state event (type: %d, number: %d, value: %d)\n",
-                       js_event_data.type, js_event_data.number, js_event_data.value);
-            }
-
-            if (js_event_data.type & JS_EVENT_BUTTON && js_event_data.value == 1) {
-                if (js_event_data.number == 1) {
-                    angle += ANGLE_STEP;
-                    
-                    if (angle > 180) angle = 180;
-                    
-                    //printf("Button %d pressed: Servo angle increased to %d°\n", BUTTON_CW, angle);
-                } else if (js_event_data.number == 2) {
-                    angle -= ANGLE_STEP;
-                    
-                    if (angle < 0) angle = 0;
-                    
-                    //printf("Button %d pressed: Servo angle decreased to %d°\n", BUTTON_CCW, angle);
-                }
-            }
-        }
-        pthread_mutex_unlock(&mtx);
-
-                int pulse_us = MIN_PULSE_US + (angle * (MAX_PULSE_US - MIN_PULSE_US) / 180);
-        if (gpio_write(gpio_fd, SERVO_PIN, 1) < 0) break; // High pulse
-        usleep(pulse_us);
-        if (gpio_write(gpio_fd, SERVO_PIN, 0) < 0) break; // Low for rest of period
-        usleep(PWM_PERIOD_US - pulse_us);
-
-    }
-    gpio_write(gpio_fd, SERVO_PIN, 0); // Set pin low
-    close(gpio_fd);
-    
-    pthread_join(reader, NULL);
-
-    pthread_mutex_destroy(&mtx);
-    pthread_cond_destroy(&cond);
-
-    return 0;
+static int gpio_stream_release(struct inode *inode, struct file *filp) {
+	return 0;
 }
+
+uint8_t rd_val = 0;
+
+static ssize_t gpio_stream_write(
+	struct file* filp,
+	const char *buf,
+	size_t len,
+	loff_t *f_pos
+) {
+	int i;
+	uint8_t pkg[3];
+	uint8_t gpio_no;
+	uint8_t op;
+	uint8_t wr_val;
+
+#if 0
+	printk(KERN_INFO DRV_NAME": %s() len = %d\n", __func__, len);
+	for(i = 0; i < len; i++){
+		printk(KERN_INFO DRV_NAME": %s() buf[%d] = %d\n", __func__, i, (int)buf[i]);
+	}
+#else
+	(void)i;
+#endif
+
+	if(len != 3 && len != 2){
+		return -EINVAL;
+	}
+
+	if(copy_from_user(pkg,	buf, len) != 0){
+		return -EFAULT;
+	}
+
+
+	gpio_no = pkg[0];
+	op = pkg[1];
+	printk(KERN_INFO DRV_NAME": %s() gpio_num = %d\n", __func__, gpio_no);
+	printk(KERN_INFO DRV_NAME": %s() op = %c\n", __func__, op);
+
+	if(op == 'w' && len == 3){
+		wr_val = pkg[2];
+		printk(KERN_INFO DRV_NAME": %s() wr_val = %d\n", __func__, wr_val);
+
+		gpio__steer_pinmux(gpio_no, GPIO__OUT);
+
+		if(wr_val){
+			gpio__set(gpio_no);
+		}else{
+			gpio__clear(gpio_no);
+		}
+
+	}else if(op == 'r' && len == 2){
+
+		gpio__steer_pinmux(gpio_no, GPIO__IN);
+
+		rd_val = gpio__read(gpio_no);
+
+		printk(KERN_INFO DRV_NAME": %s() rd_val = %d\n", __func__, rd_val);
+	}else{
+		return -EINVAL;
+	}
+
+
+	return len;
+}
+
+
+static ssize_t gpio_stream_read(
+	struct file* filp,
+	char* buf,
+	size_t len,
+	loff_t* f_pos
+) {
+
+	if(len != 1){
+		return -EINVAL;
+	}
+
+	if(copy_to_user(buf, &rd_val, len) != 0){
+		return -EFAULT;
+	}else{
+		return len;
+	}
+}
+
+
+static long gpio_stream_ioctl(
+	struct file* filp,
+	unsigned int cmd,
+	unsigned long arg
+) {
+	switch(cmd){
+		//case IOCTL_MOTOR_CLTR_SET_MODUO:
+			//TODO
+			//break;
+		default:
+			break;
+	}
+
+	return 0;
+}
+
+loff_t gpio_stream_llseek(
+	struct file* filp,
+	loff_t offset,
+	int whence
+) {
+	switch(whence){
+		case SEEK_SET:
+			filp->f_pos = offset;
+			break;
+		case SEEK_CUR:
+			filp->f_pos += offset;
+			break;
+		case SEEK_END:
+			return -ENOSYS; // Function not implemented.
+		default:
+			return -EINVAL;
+		}
+	return filp->f_pos;
+}
+
+static struct file_operations gpio_stream_fops = {
+	open           : gpio_stream_open,
+	release        : gpio_stream_release,
+	read           : gpio_stream_read,
+	write          : gpio_stream_write,
+	unlocked_ioctl : gpio_stream_ioctl,
+	llseek         : gpio_stream_llseek
+};
+
+
+void gpio_ctrl_exit(void) {
+	gpio__exit();
+
+	unregister_chrdev(DEV_STREAM_MAJOR, DEV_STREAM_NAME);
+
+	printk(KERN_INFO DRV_NAME": Module removed.\n");
+}
+
+int gpio_ctrl_init(void) {
+	int r;
+
+	printk(KERN_INFO DRV_NAME": Inserting module...\n");
+
+	r = register_chrdev(DEV_STREAM_MAJOR, DEV_STREAM_NAME, &gpio_stream_fops);
+	if(r < 0){
+		printk(KERN_ERR DRV_NAME": cannot obtain major number %d!\n", DEV_STREAM_MAJOR);
+		goto exit;
+	}
+
+	r = gpio__init();
+	if(r){
+		goto exit;
+	}
+
+exit:
+	if(r){
+		printk(KERN_ERR DRV_NAME": %s() failed with %d!\n", __func__, r);
+		gpio_ctrl_exit();
+	}else{
+		printk(KERN_INFO DRV_NAME": Inserting module successful.\n");
+	}
+	return r;
+}
+
+
+module_init(gpio_ctrl_init);
+module_exit(gpio_ctrl_exit);

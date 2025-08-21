@@ -1,4 +1,5 @@
-//#include <fcntl.h>
+
+#include <fcntl.h>
 #include <stdio.h>
 #include <unistd.h>
 #include <linux/joystick.h>
@@ -11,11 +12,11 @@
 #include "gpio.h"
 
 int gpio_write(int fd, uint8_t pin, uint8_t value) {
-    gpio_ctrl__stream_pkg_t pkg = {
-        .gpio_no = pin,
-        .op = GPIO_CTRL__WRITE,
-        .wr_val = value
-    };
+    uint8_t pkg[3];
+	pkg[0] = pin;
+	pkg[1] = GPIO_CTRL__WRITE;
+	pkg[2] = value;
+
     if (write(fd, &pkg, 3) != 3) {
         perror("Failed to write to GPIO");
         return -1;
@@ -32,7 +33,7 @@ int gpio_write(int fd, uint8_t pin, uint8_t value) {
 
 struct js_event js_event_data;
 volatile int ready = 0;
-volatile int done = 0; // Flag to indicate reader thread termination
+volatile int done = 0; 
 pthread_mutex_t mtx = PTHREAD_MUTEX_INITIALIZER;
 pthread_cond_t cond = PTHREAD_COND_INITIALIZER;
 
@@ -79,12 +80,12 @@ int main() {
     int angle = 90;
     // Open GPIO device
     int gpio_fd = open(DEV_STREAM_FN, O_RDWR);
-    printf("Controlling servo on GPIO %d... Press Ctrl+C to exit.\n", SERVO_PIN);
-
+    
     if (gpio_fd < 0) {
         perror("Failed to open /dev/gpio_stream");
         return EXIT_FAILURE;
     }
+    printf("Controlling servo on GPIO %d... Press Ctrl+C to exit.\n", SERVO_PIN);
     pthread_t reader;
 
 
@@ -102,6 +103,7 @@ int main() {
         }
 
         if (ready) {
+            uint8_t pin, value;
             if (js_event_data.type & JS_EVENT_BUTTON) {
                 printf("Button %d %s (value: %d)\n",
                     js_event_data.number,
@@ -117,33 +119,45 @@ int main() {
             }
 
             if (js_event_data.type & JS_EVENT_BUTTON && js_event_data.value == 1) {
-                if (js_event_data.number == 1) {
-                    angle += ANGLE_STEP;
-                    
-                    if (angle > 180) angle = 180;
-                    
-                    //printf("Button %d pressed: Servo angle increased to %d°\n", BUTTON_CW, angle);
-                } else if (js_event_data.number == 2) {
-                    angle -= ANGLE_STEP;
-                    
-                    if (angle < 0) angle = 0;
-                    
-                    //printf("Button %d pressed: Servo angle decreased to %d°\n", BUTTON_CCW, angle);
+                if (js_event_data.number == 1) { // CCW BUTTON
+                    pin=4;
+                    value=0;
+                    gpio_write(gpio_fd, pin, value); 
+
+                    pin=3;
+                    value=1;
+                    gpio_write(gpio_fd, pin, value);
+
+                    pin=2;
+                    value=1;
+                    gpio_write(gpio_fd, pin, value);  
+                } else if (js_event_data.number == 2) { // CW BUTTON
+                    pin=4;
+                    value=1;
+                    gpio_write(gpio_fd, pin, value); 
+
+                    pin=3;
+                    value=0;
+                    gpio_write(gpio_fd, pin, value);
+
+                    pin=2;
+                    value=1;
+                    gpio_write(gpio_fd, pin, value);
+                }else if (js_event_data.number == 3) { //STOP BUTTON - X
+                    pin=2;
+                    value=0;
+                    gpio_write(gpio_fd, pin, value);
                 }
             }
+
         }
         pthread_mutex_unlock(&mtx);
 
-                int pulse_us = MIN_PULSE_US + (angle * (MAX_PULSE_US - MIN_PULSE_US) / 180);
-        if (gpio_write(gpio_fd, SERVO_PIN, 1) < 0) break; // High pulse
-        usleep(pulse_us);
-        if (gpio_write(gpio_fd, SERVO_PIN, 0) < 0) break; // Low for rest of period
-        usleep(PWM_PERIOD_US - pulse_us);
 
     }
-    gpio_write(gpio_fd, SERVO_PIN, 0); // Set pin low
+    gpio_write(gpio_fd, SERVO_PIN, 0); // Set pin low //WRONG MODIFY
     close(gpio_fd);
-
+    
     pthread_join(reader, NULL);
 
     pthread_mutex_destroy(&mtx);
