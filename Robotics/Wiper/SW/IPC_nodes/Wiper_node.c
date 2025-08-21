@@ -15,10 +15,11 @@ int main() {
         zmq_msg_t msg;
         zmq_msg_init(&msg);
         int bytes = zmq_msg_recv(&msg, puller, ZMQ_DONTWAIT);
-        if (bytes == sizeof(int)) {
-            int angle;
-            memcpy(&angle, zmq_msg_data(&msg), sizeof(int));
-            printf("Received angle: %d\n", angle);
+        if (bytes == 2*sizeof(uint8_t)) {
+            uint8_t pkg[2];
+            memcpy(pkg, zmq_msg_data(&msg), 2*sizeof(char));
+            printf("pkg[0]: %d\n", pkg[0]);
+            printf("pkg[1]: %d\n", pkg[1]);
         }
         zmq_msg_close(&msg);
         usleep(10000);
