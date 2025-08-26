@@ -1,3 +1,4 @@
+
 #!/bin/bash
 
 # Find waf.
@@ -21,7 +22,6 @@ do
 	D=`dirname "$D"`
 	#echo $D
 done
-
 
 PYTHONPATH="$D/Common/Scripts/:$PYTHONPATH" COMMON="$D/Common/" "$D/waf" "$@"
 

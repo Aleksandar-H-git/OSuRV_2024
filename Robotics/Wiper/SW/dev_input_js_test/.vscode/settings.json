@@ -1,7 +1,0 @@
-{
-    "files.associations": {
-        "joystick.h": "c",
-        "stdio.h": "c",
-        "complex": "c"
-    }
-}
