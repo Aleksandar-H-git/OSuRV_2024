@@ -12,8 +12,11 @@
 
 
 - program: joypad_node
-    - read/ioctl /dev/input/js0
-    - czmq publisher: send buttons
+    - pthread:
+        - read/ioctl /dev/input/js0
+    - mutex: buttons
+    - main:
+        - czmq publisher: send buttons
 
 - program: wiper_node
     - pthread: 

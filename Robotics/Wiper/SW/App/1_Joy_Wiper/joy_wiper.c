@@ -5,6 +5,7 @@
 #include <linux/joystick.h>
 #include <sys/ioctl.h>
 #include <pthread.h>
+#include <semaphore.h>
 #include <errno.h>
 #include <stdlib.h>
 
@@ -12,156 +13,161 @@
 #include "gpio.h"
 
 int gpio_write(int fd, uint8_t pin, uint8_t value) {
-    uint8_t pkg[3];
+	uint8_t pkg[3];
 	pkg[0] = pin;
 	pkg[1] = GPIO_CTRL__WRITE;
 	pkg[2] = value;
 
-    if (write(fd, &pkg, 3) != 3) {
-        perror("Failed to write to GPIO");
-        return -1;
-    }
-    return 0;
+	if (write(fd, &pkg, 3) != 3) {
+		perror("Failed to write to GPIO");
+		return -1;
+	}
+	return 0;
 }
-#define SERVO_PIN 18        // GPIO pin (2-26); adjust as needed
-#define PWM_PERIOD_US 20000 // 20ms (50Hz for servo)
-#define MIN_PULSE_US 1000   // 1ms for 0°
-#define MAX_PULSE_US 2000   // 2ms for 180°
-#define ANGLE_STEP 10       // Degrees to change per button press
+
 #define BUTTON_CW 0         // Button index for clockwise (increase angle)
 #define BUTTON_CCW 1        // Button index for counterclockwise (decrease angle)
 
 struct js_event js_event_data;
-volatile int ready = 0;
-volatile int done = 0; 
-pthread_mutex_t mtx = PTHREAD_MUTEX_INITIALIZER;
-pthread_cond_t cond = PTHREAD_COND_INITIALIZER;
+
+volatile uint8_t* volatile buttons;
+pthread_mutex_t button_printf_mtx = PTHREAD_MUTEX_INITIALIZER;
+sem_t buttons_intitialized;
 
 void* js_reader(void* arg) {
-    int js_fd;
-    int num_of_axes = 0;
-    int num_of_buttons = 0;
+	int js_fd;
+	int num_of_axes = 0;
+	int num_of_buttons = 0;
 
-    // Open the joystick device file in read-only mode
-    js_fd = open("/dev/input/js0", O_RDONLY);
-    if (js_fd == -1) {
-        perror("Error opening joystick device");
-        pthread_mutex_lock(&mtx);
-        done = 1;
-        pthread_cond_signal(&cond);
-        pthread_mutex_unlock(&mtx);
+	// Open the joystick device file in read-only mode
+	js_fd = open("/dev/input/js0", O_RDONLY);
+	if (js_fd == -1) {
+		perror("Error opening joystick device");
+		return NULL;
+	}
+
+	ioctl(js_fd, JSIOCGAXES, &num_of_axes);
+	ioctl(js_fd, JSIOCGBUTTONS, &num_of_buttons);
+
+	//TODO Allocated buttons array
+	buttons = (volatile uint8_t*)malloc(num_of_buttons * sizeof(uint8_t));
+    if (buttons == NULL) {
+        perror("Memory allocation failed");
         return NULL;
     }
-
-    ioctl(js_fd, JSIOCGAXES, &num_of_axes);
-    ioctl(js_fd, JSIOCGBUTTONS, &num_of_buttons);
-
-    while (1) {
-        if (read(js_fd, &js_event_data, sizeof(struct js_event)) != sizeof(struct js_event)) {
-            perror("Error reading joystick event");
-        	pthread_mutex_lock(&mtx);
-            done = 1; 
-            pthread_cond_signal(&cond);
-            pthread_mutex_unlock(&mtx);
-            break;
-        }
-		pthread_mutex_lock(&mtx);
-        ready = 1;
-        pthread_cond_signal(&cond);
-        pthread_mutex_unlock(&mtx);
+	// Initialize buttons to 0
+    for (int i = 0; i < num_of_buttons; i++) {
+        buttons[i] = 0;
     }
+	printf("Joystick initialized with %d buttons\n", num_of_buttons);
 
-    close(js_fd);
-    return NULL;
+	sem_post(&buttons_intitialized);
+
+	while (1) {
+		if (read(js_fd, &js_event_data, sizeof(struct js_event)) != sizeof(struct js_event)) {
+			perror("Error reading joystick event");
+			break;
+		}
+
+		if (js_event_data.type & JS_EVENT_BUTTON) {
+            pthread_mutex_lock(&button_printf_mtx);
+			printf("Button %d %s (value: %d)\n",
+				js_event_data.number,
+				(js_event_data.value == 0) ? "released" : "pressed",
+				js_event_data.value
+			);
+
+        	buttons[js_event_data.number] = js_event_data.value;
+
+            pthread_mutex_unlock(&button_printf_mtx);
+        } else if (js_event_data.type & JS_EVENT_AXIS) {
+		 	printf("Axis %d moved (value: %d)\n",
+		 		js_event_data.number,
+		 		js_event_data.value
+			);
+	    }
+	}
+
+	close(js_fd);
+	return NULL;
 }
 
 int main() {
 
-    int angle = 90;
-    // Open GPIO device
-    int gpio_fd = open(DEV_STREAM_FN, O_RDWR);
-    
-    if (gpio_fd < 0) {
-        perror("Failed to open /dev/gpio_stream");
-        return EXIT_FAILURE;
-    }
-    printf("Controlling servo on GPIO %d... Press Ctrl+C to exit.\n", SERVO_PIN);
-    pthread_t reader;
+	// Open GPIO device
+	int gpio_fd = open(DEV_STREAM_FN, O_RDWR);
+	
+	if (gpio_fd < 0) {
+		perror("Failed to open /dev/gpio_stream");
+		return EXIT_FAILURE;
+	}
 
+	sem_init(&buttons_intitialized, 0, 0);
 
+	pthread_t reader;
 	pthread_create(&reader, NULL, js_reader, NULL);
 
-    while (1) {
-        pthread_mutex_lock(&mtx);
-        while (!ready && !done) {
-            pthread_cond_wait(&cond, &mtx);
-        }
 
-        if (done) {
-            pthread_mutex_unlock(&mtx);
-            break;
-        }
-
-        if (ready) {
-            uint8_t pin, value;
-            if (js_event_data.type & JS_EVENT_BUTTON) {
-                printf("Button %d %s (value: %d)\n",
-                    js_event_data.number,
-                    (js_event_data.value == 0) ? "released" : "pressed",
-                    js_event_data.value);
-            } else if (js_event_data.type & JS_EVENT_AXIS) {
-                printf("Axis %d moved (value: %d)\n",
-                    js_event_data.number,
-                    js_event_data.value);
-            } else if (js_event_data.type & JS_EVENT_INIT) {
-                printf("Initial state event (type: %d, number: %d, value: %d)\n",
-                       js_event_data.type, js_event_data.number, js_event_data.value);
-            }
-
-            if (js_event_data.type & JS_EVENT_BUTTON && js_event_data.value == 1) {
-                if (js_event_data.number == 1) { // CCW BUTTON
-                    pin=4;
-                    value=0;
-                    gpio_write(gpio_fd, pin, value); 
-
-                    pin=3;
-                    value=1;
-                    gpio_write(gpio_fd, pin, value);
-
-                    pin=2;
-                    value=1;
-                    gpio_write(gpio_fd, pin, value);  
-                } else if (js_event_data.number == 2) { // CW BUTTON
-                    pin=4;
-                    value=1;
-                    gpio_write(gpio_fd, pin, value); 
-
-                    pin=3;
-                    value=0;
-                    gpio_write(gpio_fd, pin, value);
-
-                    pin=2;
-                    value=1;
-                    gpio_write(gpio_fd, pin, value);
-                }else if (js_event_data.number == 3) { //STOP BUTTON - X
-                    pin=2;
-                    value=0;
-                    gpio_write(gpio_fd, pin, value);
-                }
-            }
-
-        }
-        pthread_mutex_unlock(&mtx);
+	sem_wait(&buttons_intitialized);
 
 
+	uint8_t* prev_buttons = (uint8_t*)malloc(3 * sizeof(uint8_t));
+    if (prev_buttons == NULL) {
+        perror("Memory allocation failed");
+        return 1;
     }
-    gpio_write(gpio_fd, SERVO_PIN, 0); // Set pin low //WRONG MODIFY
-    close(gpio_fd);
-    
-    pthread_join(reader, NULL);
+	// Initialize prev_states to 0
+    for (int i = 0; i < 3; i++) {
+        prev_buttons[i] = 0;
+    }
 
-    pthread_mutex_destroy(&mtx);
-    pthread_cond_destroy(&cond);
 
-    return 0;
+	while (1) {
+		pthread_mutex_lock(&button_printf_mtx);
+		//TODO Other buttons
+		if(buttons[0] && (buttons[0] != prev_buttons[0])){ // CCW BUTTON
+			printf("CCW\n");
+			gpio_write(gpio_fd, 3, 1); // CCW
+			gpio_write(gpio_fd, 4, 0); // CCW
+
+			gpio_write(gpio_fd, 2, 1); // EN = 1
+		} else if (buttons[1] && (buttons[1] != prev_buttons[1])) { // CW BUTTON
+			printf("CW\n");
+			gpio_write(gpio_fd, 3, 0); // CW
+			gpio_write(gpio_fd, 4, 1); // CW
+
+			gpio_write(gpio_fd, 2, 1); // EN = 1
+		}else if (buttons[2] && (buttons[2] != prev_buttons[2])) { //STOP BUTTON - X
+			printf("STOP\n");
+			gpio_write(gpio_fd, 2, 0); // EN = 0
+		}
+
+		prev_buttons[0] = buttons[0];
+		prev_buttons[1] = buttons[1];
+		prev_buttons[2] = buttons[2];
+		pthread_mutex_unlock(&button_printf_mtx);
+		usleep(10000); 
+		
+	}
+
+	printf("Exiting...\n");
+	
+	
+	pthread_join(reader, NULL);
+
+	if (buttons != NULL) {
+        free((void*)buttons);
+        buttons = NULL;
+    }
+
+	if (prev_buttons != NULL) {
+        free(prev_buttons);
+        prev_buttons = NULL;
+    }
+
+	close(gpio_fd);
+	pthread_mutex_destroy(&button_printf_mtx);
+	//pthread_cond_destroy(&cond);
+
+	return 0;
 }
