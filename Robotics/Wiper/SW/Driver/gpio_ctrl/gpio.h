@@ -9,6 +9,15 @@
 int gpio__init(void);
 void gpio__exit(void);
 
+
+typedef enum {
+	GPIO__PULL_NONE = 0,
+	GPIO__PULL_DOWN = 1,
+	GPIO__PULL_UP   = 2,
+} gpio__pull_t;
+
+void gpio__pull(gpio__pull_t pull);
+
 typedef enum {
 	GPIO__IN = 0b000,
 	GPIO__OUT = 0b001,

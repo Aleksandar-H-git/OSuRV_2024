@@ -4,6 +4,7 @@
 
 #include <asm/io.h> // ioremap(), iounmap()
 #include <linux/errno.h> // ENOMEM
+#include <linux/delay.h> // udelay()
 
 #define DRV_NAME "gpio_ctrl"
 
@@ -44,6 +45,19 @@ void gpio__exit(void) {
 		iounmap(virt_gpio_base);
 		virt_gpio_base = 0;
 	}
+}
+
+#define GPPUD 0x94
+#define GPPUDCLK0 0x98
+#define GPPUDCLK1 0x9C
+
+void gpio__pull(gpio__pull_t pull){
+	iowrite32(pull, virt_gpio_base + GPPUD);
+	udelay(100); //TODO Optimize
+	iowrite32(0xffffffff, virt_gpio_base + GPPUDCLK0);
+	udelay(100); //TODO Optimize
+	iowrite32(0x00000000, virt_gpio_base + GPPUDCLK0);
+	iowrite32(0, virt_gpio_base + GPPUD);
 }
 
 

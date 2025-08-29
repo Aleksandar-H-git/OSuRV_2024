@@ -42,36 +42,42 @@ int parse_args(
 			// Print help.
 			usage(stdout);
 			return 0;
+		}else if(
+			c_str_eq(argv[1], "n") ||
+			c_str_eq(argv[1], "u") ||
+			c_str_eq(argv[1], "d")
+		){
+			*p_op = argv[1][0];
 		}else{
 			// Error.
-			fprintf(stderr, "ERROR: Wrong argument \"%s\"!\n", argv[1]);
+			fprintf(stderr, "ERROR: Wrong op \"%s\"!\n", argv[1]);
 			usage(stderr);
 			return 1;
 		}
 	}else if(argc == 3){
-		if(!c_str_eq(argv[2], "r")){
-			fprintf(stderr, "ERROR: Wrong command \"%s\"!\n", argv[2]);
+		if(!c_str_eq(argv[1], "r")){
+			fprintf(stderr, "ERROR: Wrong op \"%s\"!\n", argv[1]);
 			usage(stderr);
 			return 2;
 		}
 		*p_op = 'r';
 		int n;
-		n = sscanf(argv[1], "%d", p_gpio_no);
+		n = sscanf(argv[2], "%d", p_gpio_no);
 		if(n != 1){
-			fprintf(stderr, "ERROR: Invalid number \"%s\"!\n", argv[1]);
+			fprintf(stderr, "ERROR: Invalid number \"%s\"!\n", argv[2]);
 			return 3;
 		}
 	}else if(argc == 4){
-		if(!c_str_eq(argv[2], "w")){
-			fprintf(stderr, "ERROR: Wrong command \"%s\"!\n", argv[2]);
+		if(!c_str_eq(argv[1], "w")){
+			fprintf(stderr, "ERROR: Wrong op \"%s\"!\n", argv[1]);
 			usage(stderr);
 			return 2;
 		}
 		*p_op = 'w';
 		int n;
-		n = sscanf(argv[1], "%d", p_gpio_no);
+		n = sscanf(argv[2], "%d", p_gpio_no);
 		if(n != 1){
-			fprintf(stderr, "ERROR: Invalid number \"%s\"!\n", argv[1]);
+			fprintf(stderr, "ERROR: Invalid number \"%s\"!\n", argv[2]);
 			return 3;
 		}
 
@@ -108,7 +114,7 @@ int main(int argc, char** argv){
 
 
 	//TODO Check gpio_num, op and wr_val for correct values.
-	if(op != 'w' && op != 'r'){
+	if(op != 'w' && op != 'r' && op != 'n' && op != 'u' && op != 'd'){
 		printf("ERROR: op not w nor r\n");
 		return 5;
 	}
@@ -133,8 +139,8 @@ int main(int argc, char** argv){
 
 	if(op == 'w'){
 		uint8_t pkg[3];
-		pkg[0] = gpio_no;
-		pkg[1] = 'w';
+		pkg[0] = 'w';
+		pkg[1] = gpio_no;
 		pkg[2] = wr_val;
 
 		printf("write %d to gpio%d\n", wr_val, gpio_no);
@@ -146,8 +152,8 @@ int main(int argc, char** argv){
 		}
 	}else if(op == 'r'){
 		uint8_t pkg[2];
-        pkg[0] = gpio_no;
-		pkg[1] = 'r';
+		pkg[0] = 'r';
+        pkg[1] = gpio_no;
 
 		r = write(fd, pkg, sizeof(pkg));
 		if(r != sizeof(pkg)){
@@ -166,8 +172,17 @@ int main(int argc, char** argv){
 #endif
 
 		printf("read %d from gpio%d\n", rd_val, gpio_no);
+	}else if(op == 'n' || op == 'u' || op == 'd'){
+		uint8_t pkg[1];
+		pkg[0] = op;
+ 
+		r = write(fd, pkg, sizeof(pkg));
+		if(r != sizeof(pkg)){
+			fprintf(stderr, "ERROR: write went wrong!\n");
+			return 4;
+		}
 	}
-
+	
 	close(fd);
 
 	printf("End.\n");

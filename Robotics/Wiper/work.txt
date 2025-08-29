@@ -1,5 +1,5 @@
 
-- program: joypad_wiper
++ program: joypad_wiper
     - pthread: read/ioctl /dev/input/js0
     - mutex: buttons
     - main:
@@ -9,19 +9,32 @@
                 - Motor park switch: shorted when in park state, backward limit
                 - external limit switch: shorted when in max state, forward limit
 
-
-
-- program: joypad_node
++ program: joypad_node
     - pthread:
         - read/ioctl /dev/input/js0
     - mutex: buttons
     - main:
         - czmq publisher: send buttons
 
-- program: wiper_node
++ program: wiper_node
     - pthread: 
         - czmq subscriber: receive buttons
     - mutex: cmd
     - main: read/write /dev/gpio_stream
             
+
+- Feedback
+    - test read
+        - jump wire to 3V3, then test_gpio r 22
+        - jump wire to GND, then test_gpio r 22
+    - add pull-up/down support to driver
+        - add to test_gpio program n|u|d ops
+        - add to gpio_ctrl driver n|u|d ops
+            - Add support to gpio.h|c for pull-up/down
+                - gpio__pull()
+                - Datasheet 91
+                    - GPPUD reg
+            - Add to write in main.c support for u and d
+        - Test all combinations with n|u|d and jump wire to 3V3|GND
+
   

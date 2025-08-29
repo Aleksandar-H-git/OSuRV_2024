@@ -9,7 +9,7 @@
 #include "include/gpio_ctrl.h"
 #include "gpio.h"
 
-#define ZMQ_ENDPOINT "ipc:///tmp/servo_zmq"
+#define ZMQ_ENDPOINT "tcp://10.1.207.139:5555"
 #define DEV_STREAM_FN "/dev/gpio_stream"
 
 int gpio_write(int fd, uint8_t pin, uint8_t value) {
@@ -35,31 +35,39 @@ void* zmq_subscriber(void* arg) {
         perror("Failed to create ZeroMQ context");
         return NULL;
     }
-    void* puller = zmq_socket(context, ZMQ_PULL);
-    if (!puller) {
+    void* subscriber = zmq_socket(context, ZMQ_SUB);
+    if (!subscriber) {
         perror("Failed to create ZeroMQ socket");
         zmq_ctx_destroy(context);
         return NULL;
     }
-    if (zmq_connect(puller, ZMQ_ENDPOINT) != 0) {
+    if (zmq_connect(subscriber, ZMQ_ENDPOINT) != 0) {
         perror("Failed to connect ZeroMQ socket");
-        zmq_close(puller);
+        zmq_close(subscriber);
         zmq_ctx_destroy(context);
         return NULL;
     }
 
-    printf("Listening for messages on %s...\n", ZMQ_ENDPOINT);
+    if (zmq_setsockopt(subscriber, ZMQ_SUBSCRIBE, "", 0) != 0) {
+        perror("Failed to set ZMQ_SUBSCRIBE");
+        zmq_close(subscriber);
+        zmq_ctx_destroy(context);
+        return NULL;
+    }
+
+    printf("Connected and listening on %s...\n", ZMQ_ENDPOINT);
+
 
     while (1) {
         zmq_msg_t msg;
         zmq_msg_init(&msg);
-        int bytes = zmq_msg_recv(&msg, puller, 0); // Blocking receive
+        int bytes = zmq_msg_recv(&msg, subscriber, 0); // Blocking receive
         if (bytes > 0) {
             char* buffer = (char*)malloc((bytes + 1) * sizeof(char));
             if (buffer == NULL) {
                 perror("Memory allocation failed for buffer");
                 zmq_msg_close(&msg);
-                zmq_close(puller);
+                zmq_close(subscriber);
                 zmq_ctx_destroy(context);
                 return NULL;
             }
@@ -74,7 +82,7 @@ void* zmq_subscriber(void* arg) {
                     free(buffer);
                     pthread_mutex_unlock(&cmd_mtx);
                     zmq_msg_close(&msg);
-                    zmq_close(puller);
+                    zmq_close(subscriber);
                     zmq_ctx_destroy(context);
                     return NULL;
                 }
@@ -86,7 +94,7 @@ void* zmq_subscriber(void* arg) {
                     free(buffer);
                     pthread_mutex_unlock(&cmd_mtx);
                     zmq_msg_close(&msg);
-                    zmq_close(puller);
+                    zmq_close(subscriber);
                     zmq_ctx_destroy(context);
                     return NULL;
                 }
@@ -104,7 +112,7 @@ void* zmq_subscriber(void* arg) {
                         free(buffer);
                         pthread_mutex_unlock(&cmd_mtx);
                         zmq_msg_close(&msg);
-                        zmq_close(puller);
+                        zmq_close(subscriber);
                         zmq_ctx_destroy(context);
                         return NULL;
                     }
@@ -120,7 +128,7 @@ void* zmq_subscriber(void* arg) {
         zmq_msg_close(&msg);
     }
 
-    zmq_close(puller);
+    zmq_close(subscriber);
     zmq_ctx_destroy(context);
     return NULL;
 }

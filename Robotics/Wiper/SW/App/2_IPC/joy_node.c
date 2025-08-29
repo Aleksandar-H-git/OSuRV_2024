@@ -12,7 +12,7 @@
 #include "include/gpio_ctrl.h"
 #include "gpio.h"
 
-#define ZMQ_ENDPOINT "ipc:///tmp/servo_zmq"
+#define ZMQ_ENDPOINT "tcp://0.0.0.0:5555"
 // #define DEV_STREAM_FN "/dev/gpio_stream"
 
 
@@ -28,7 +28,7 @@ pthread_mutex_t button_printf_mtx = PTHREAD_MUTEX_INITIALIZER;
 sem_t buttons_intitialized;
 
 void* js_reader(void* arg) {
-	void* pusher = arg;
+	void* publisher = arg;
 	int js_fd;
 	int num_of_axes = 0;
 	int num_of_buttons = 0;
@@ -62,7 +62,7 @@ void* js_reader(void* arg) {
         return NULL;
     }
     snprintf(num_buf, num_buf_size, "%d", num_of_buttons);
-    if (zmq_send(pusher, num_buf, strlen(num_buf), 0) == -1) {
+    if (zmq_send(publisher, num_buf, strlen(num_buf), 0) == -1) {
         perror("Failed to send number of buttons");
     }
     free(num_buf); // Free the dynamic buffer after sending
@@ -86,7 +86,7 @@ void* js_reader(void* arg) {
                 }
                 state_buf[num_of_buttons] = '\0';
                 printf("Sending button states: %s\n", state_buf);
-                if (zmq_send(pusher, state_buf, num_of_buttons, 0) == -1) {
+                if (zmq_send(publisher, state_buf, num_of_buttons, 0) == -1) {
                     perror("Failed to send button states");
                 }
             }
@@ -111,15 +111,15 @@ int main() {
         perror("Failed to create ZeroMQ context");
         return EXIT_FAILURE;
     }
-    void* pusher = zmq_socket(context, ZMQ_PUSH);
-    if (!pusher) {
-        perror("Failed to create ZeroMQ socket");
+    void* publisher = zmq_socket(context, ZMQ_PUB);
+    if (!publisher) {
+        perror("Failed to create ZeroMQ PUB socket");
         zmq_ctx_destroy(context);
         return EXIT_FAILURE;
     }
-    if (zmq_bind(pusher, ZMQ_ENDPOINT) != 0) {
-        perror("Failed to bind ZeroMQ socket");
-        zmq_close(pusher);
+    if (zmq_bind(publisher, ZMQ_ENDPOINT) != 0) {
+        perror("Failed to bind ZeroMQ PUB socket");
+        zmq_close(publisher);
         zmq_ctx_destroy(context);
         return EXIT_FAILURE;
     }
@@ -127,9 +127,9 @@ int main() {
     sem_init(&buttons_intitialized, 0, 0);
 
     pthread_t reader;
-    if (pthread_create(&reader, NULL, js_reader, pusher) != 0) {
+    if (pthread_create(&reader, NULL, js_reader, publisher) != 0) {
         perror("Failed to create reader thread");
-        zmq_close(pusher);
+        zmq_close(publisher);
         zmq_ctx_destroy(context);
         sem_destroy(&buttons_intitialized);
         return EXIT_FAILURE;
@@ -140,7 +140,7 @@ int main() {
     uint8_t* prev_buttons = (uint8_t*)malloc(num_of_buttons * sizeof(uint8_t));
     if (prev_buttons == NULL) {
         perror("Memory allocation failed for prev_buttons");
-        zmq_close(pusher);
+        zmq_close(publisher);
         zmq_ctx_destroy(context);
         sem_destroy(&buttons_intitialized);
         return EXIT_FAILURE;
@@ -173,7 +173,7 @@ int main() {
         free(prev_buttons);
         prev_buttons = NULL;
     }
-    zmq_close(pusher);
+    zmq_close(publisher);
     zmq_ctx_destroy(context);
     sem_destroy(&buttons_intitialized);
     pthread_mutex_destroy(&button_mtx);

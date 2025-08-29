@@ -42,7 +42,7 @@ static ssize_t gpio_stream_write(
 	(void)i;
 #endif
 
-	if(len != 3 && len != 2){
+	if(len != 3 && len != 2 && len != 1){
 		return -EINVAL;
 	}
 
@@ -51,12 +51,13 @@ static ssize_t gpio_stream_write(
 	}
 
 
-	gpio_no = pkg[0];
-	op = pkg[1];
-	printk(KERN_INFO DRV_NAME": %s() gpio_num = %d\n", __func__, gpio_no);
+	op = pkg[0];
 	printk(KERN_INFO DRV_NAME": %s() op = %c\n", __func__, op);
 
 	if(op == 'w' && len == 3){
+		gpio_no = pkg[1];
+		printk(KERN_INFO DRV_NAME": %s() gpio_num = %d\n", __func__, gpio_no);
+
 		wr_val = pkg[2];
 		printk(KERN_INFO DRV_NAME": %s() wr_val = %d\n", __func__, wr_val);
 
@@ -69,12 +70,20 @@ static ssize_t gpio_stream_write(
 		}
 
 	}else if(op == 'r' && len == 2){
+		gpio_no = pkg[1];
+		printk(KERN_INFO DRV_NAME": %s() gpio_num = %d\n", __func__, gpio_no);
 
 		gpio__steer_pinmux(gpio_no, GPIO__IN);
 
 		rd_val = gpio__read(gpio_no);
 
 		printk(KERN_INFO DRV_NAME": %s() rd_val = %d\n", __func__, rd_val);
+	}else if(op == 'n'){
+		gpio__pull(GPIO__PULL_NONE);
+	}else if(op == 'd'){
+		gpio__pull(GPIO__PULL_DOWN);
+	}else if(op == 'u'){
+		gpio__pull(GPIO__PULL_UP);
 	}else{
 		return -EINVAL;
 	}
