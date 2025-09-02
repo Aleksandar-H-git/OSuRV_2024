@@ -16,7 +16,7 @@ typedef enum {
 	GPIO__PULL_UP   = 2,
 } gpio__pull_t;
 
-void gpio__pull(gpio__pull_t pull);
+void gpio__pull(uint8_t gpio_no, gpio__pull_t pull);
 
 typedef enum {
 	GPIO__IN = 0b000,

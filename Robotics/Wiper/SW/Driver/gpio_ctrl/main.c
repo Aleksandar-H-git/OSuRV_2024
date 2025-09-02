@@ -4,11 +4,15 @@
 #include <linux/errno.h> // EFAULT
 #include <linux/uaccess.h> // copy_from_user(), copy_to_user()
 
+#include <linux/delay.h> // udelay()
+
 MODULE_LICENSE("Dual BSD/GPL");
 
 
 #include "include/gpio_ctrl.h"
 #include "gpio.h"
+
+
 
 
 static int gpio_stream_open(struct inode *inode, struct file *filp) {
@@ -27,6 +31,7 @@ static ssize_t gpio_stream_write(
 	size_t len,
 	loff_t *f_pos
 ) {
+
 	int i;
 	uint8_t pkg[3];
 	uint8_t gpio_no;
@@ -69,21 +74,24 @@ static ssize_t gpio_stream_write(
 			gpio__clear(gpio_no);
 		}
 
-	}else if(op == 'r' && len == 2){
+	}else if(len == 2){
 		gpio_no = pkg[1];
 		printk(KERN_INFO DRV_NAME": %s() gpio_num = %d\n", __func__, gpio_no);
-
+		
 		gpio__steer_pinmux(gpio_no, GPIO__IN);
 
-		rd_val = gpio__read(gpio_no);
+		if(op == 'r'){
+			gpio__pull(gpio_no, GPIO__PULL_NONE);
+		}else if(op == 'd'){			
+			gpio__pull(gpio_no, GPIO__PULL_DOWN);
+		}else if(op == 'u'){
+			gpio__pull(gpio_no, GPIO__PULL_UP);			
+		}else{
+			return -EINVAL;
+		}
 
+		rd_val = gpio__read(gpio_no);
 		printk(KERN_INFO DRV_NAME": %s() rd_val = %d\n", __func__, rd_val);
-	}else if(op == 'n'){
-		gpio__pull(GPIO__PULL_NONE);
-	}else if(op == 'd'){
-		gpio__pull(GPIO__PULL_DOWN);
-	}else if(op == 'u'){
-		gpio__pull(GPIO__PULL_UP);
 	}else{
 		return -EINVAL;
 	}

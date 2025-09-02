@@ -42,12 +42,6 @@ int parse_args(
 			// Print help.
 			usage(stdout);
 			return 0;
-		}else if(
-			c_str_eq(argv[1], "n") ||
-			c_str_eq(argv[1], "u") ||
-			c_str_eq(argv[1], "d")
-		){
-			*p_op = argv[1][0];
 		}else{
 			// Error.
 			fprintf(stderr, "ERROR: Wrong op \"%s\"!\n", argv[1]);
@@ -55,12 +49,19 @@ int parse_args(
 			return 1;
 		}
 	}else if(argc == 3){
-		if(!c_str_eq(argv[1], "r")){
+		if(!c_str_eq(argv[1], "r") && !c_str_eq(argv[1], "u") && !c_str_eq(argv[1], "d")){
 			fprintf(stderr, "ERROR: Wrong op \"%s\"!\n", argv[1]);
 			usage(stderr);
 			return 2;
 		}
-		*p_op = 'r';
+		if(c_str_eq(argv[1], "r")){
+			*p_op = 'r';
+		}else if(
+			c_str_eq(argv[1], "u") ||
+			c_str_eq(argv[1], "d")
+		){
+			*p_op = argv[1][0];
+		}
 		int n;
 		n = sscanf(argv[2], "%d", p_gpio_no);
 		if(n != 1){
@@ -114,7 +115,7 @@ int main(int argc, char** argv){
 
 
 	//TODO Check gpio_num, op and wr_val for correct values.
-	if(op != 'w' && op != 'r' && op != 'n' && op != 'u' && op != 'd'){
+	if(op != 'w' && op != 'r' && op != 'u' && op != 'd'){
 		printf("ERROR: op not w nor r\n");
 		return 5;
 	}
@@ -125,8 +126,6 @@ int main(int argc, char** argv){
 			return 6;
 		}
 	}
-
-
 
 	int fd;
 	fd = open(DEV_STREAM_FN, O_RDWR);
@@ -172,16 +171,29 @@ int main(int argc, char** argv){
 #endif
 
 		printf("read %d from gpio%d\n", rd_val, gpio_no);
-	}else if(op == 'n' || op == 'u' || op == 'd'){
-		uint8_t pkg[1];
-		pkg[0] = op;
- 
+	 }else if(op == 'u' || op == 'd'){
+	 	uint8_t pkg[2];
+	 	pkg[0] = op;
+	 	pkg[1] = gpio_no;
+		
 		r = write(fd, pkg, sizeof(pkg));
-		if(r != sizeof(pkg)){
-			fprintf(stderr, "ERROR: write went wrong!\n");
-			return 4;
+	 	if(r != sizeof(pkg)){
+	 		fprintf(stderr, "ERROR: write went wrong!\n");
+	 		return 4;
+	 	}
+
+		uint8_t rd_val;
+		r = read(fd, (char*)&rd_val, sizeof(rd_val));
+        if(r != sizeof(rd_val)){
+			fprintf(stderr, "ERROR: read went wrong!\n");
+			return 5;
 		}
-	}
+#if DEBUG
+		printf("rd_val = %d\n", rd_val);
+#endif
+
+		printf("read %d from gpio%d\n", rd_val, gpio_no);
+	 }
 	
 	close(fd);
 

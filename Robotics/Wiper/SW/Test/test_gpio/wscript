@@ -18,7 +18,7 @@ import waflib
 ###############################################################################
 
 one_file_programs = [
-	'test_gpio.c',
+	'test_gpio.c'
 ]
 
 def options(opt):

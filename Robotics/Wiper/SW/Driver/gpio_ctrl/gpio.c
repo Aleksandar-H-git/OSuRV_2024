@@ -47,19 +47,6 @@ void gpio__exit(void) {
 	}
 }
 
-#define GPPUD 0x94
-#define GPPUDCLK0 0x98
-#define GPPUDCLK1 0x9C
-
-void gpio__pull(gpio__pull_t pull){
-	iowrite32(pull, virt_gpio_base + GPPUD);
-	udelay(100); //TODO Optimize
-	iowrite32(0xffffffff, virt_gpio_base + GPPUDCLK0);
-	udelay(100); //TODO Optimize
-	iowrite32(0x00000000, virt_gpio_base + GPPUDCLK0);
-	iowrite32(0, virt_gpio_base + GPPUD);
-}
-
 
 /**
  * @return 1 to error to exit, 0 if all Ok.
@@ -72,6 +59,33 @@ void gpio__pull(gpio__pull_t pull){
 				pin \
 			), 1 \
 		) : 0
+
+
+
+
+#define GPPUD 0x94
+#define GPPUDCLK0 0x98
+#define GPPUDCLK1 0x9C
+
+void gpio__pull(uint8_t pin, gpio__pull_t pull){
+
+
+	// For pins [2, 26].
+	if(check_pin(pin)){
+		return;
+	}
+	if(!virt_gpio_base){
+		return;
+	}
+
+	iowrite32(pull, virt_gpio_base + GPPUD);
+	udelay(100); //TODO Optimize to 1
+	iowrite32(0x1 << pin, virt_gpio_base + GPPUDCLK0);
+	udelay(100); //TODO Optimize
+	iowrite32(0, virt_gpio_base + GPPUD);
+	iowrite32(0x0, virt_gpio_base + GPPUDCLK0);
+}
+
 
 
 typedef struct {
