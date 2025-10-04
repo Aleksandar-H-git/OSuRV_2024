@@ -14,15 +14,14 @@
 
 int gpio_write(int fd, uint8_t pin, uint8_t value) {
 	uint8_t pkg[3];
-	pkg[0] = GPIO_CTRL__WRITE;
-	pkg[1] = pin;
+	pkg[0] = pin;
+	pkg[1] = GPIO_CTRL__WRITE;
 	pkg[2] = value;
 	
-
-	if (write(fd, &pkg, 3) != 3) {
+write(fd, &pkg, 3) != 3) {
 		perror("Failed to write to GPIO");
 		return -1;
-	}
+	}*/
 	return 0;
 }
 

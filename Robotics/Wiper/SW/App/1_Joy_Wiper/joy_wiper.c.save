@@ -10,14 +10,21 @@
 #include <stdlib.h>
 
 #include "include/gpio_ctrl.h"
-#include "gpio.h"
+ssize_t total = 0;
+while (total < 3) {
+    ssize_t written = write(fd, ((char*)&pkg) + total, 3 - total);
+    if (written < 0) {
+        perror("Failed to write to GPIO");
+        return -1;
+    }
+    total += written;
+}#include "gpio.h"
 
 int gpio_write(int fd, uint8_t pin, uint8_t value) {
 	uint8_t pkg[3];
-	pkg[0] = GPIO_CTRL__WRITE;
-	pkg[1] = pin;
+	pkg[0] = pin;
+	pkg[1] = GPIO_CTRL__WRITE;
 	pkg[2] = value;
-	
 
 	if (write(fd, &pkg, 3) != 3) {
 		perror("Failed to write to GPIO");

@@ -9,8 +9,8 @@
 #include <stdlib.h>
 #include <errno.h>
 #include <pthread.h>
-#include "include/gpio_ctrl.h"
-#include "gpio.h"
+#include "../../Driver/gpio_ctrl/include/gpio_ctrl.h"
+#include "../../Driver/gpio_ctrl/gpio.h"
 
 #define ZMQ_ENDPOINT "tcp://0.0.0.0:5555"
 // #define DEV_STREAM_FN "/dev/gpio_stream"

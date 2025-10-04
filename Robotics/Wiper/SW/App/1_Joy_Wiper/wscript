@@ -31,9 +31,12 @@ def options(opt):
 def configure(cfg):
 	cfg.load('gcc gxx')
 
-	cfg.env.append_value('CFLAGS', ['-pthread'])
-	cfg.env.append_value('LINKFLAGS', ['-pthread', '-lzmq'])
-	cfg.env.append_value('CFLAGS', ['-g', '-rdynamic'])  # Debugging support
+	# Compile flags
+	cfg.env.append_value('CFLAGS', ['-pthread', '-g', '-rdynamic'])
+
+	# Link flags: keep pthread here, but put zmq in LIB (recommended)
+	cfg.env.append_value('LINKFLAGS', ['-pthread'])
+	cfg.env.append_value('LIB', ['zmq'])
 
 	# Add include path from the driver
 	driver_include = cfg.srcnode.find_node('../../Driver/gpio_ctrl')

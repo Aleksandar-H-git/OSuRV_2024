@@ -6,16 +6,16 @@
 #include <stdlib.h>
 #include <errno.h>
 #include <pthread.h>
-#include "../../Driver/gpio_ctrl/include/gpio_ctrl.h"
-#include "../../Driver/gpio_ctrl/gpio.h"
+#include "../../include/gpio_ctrl.h"
+#include "gpio.h"
 
 #define ZMQ_ENDPOINT "tcp://10.1.207.139:5555"
 #define DEV_STREAM_FN "/dev/gpio_stream"
 
 int gpio_write(int fd, uint8_t pin, uint8_t value) {
     uint8_t pkg[3];
-    pkg[0] = GPIO_CTRL__WRITE;
-    pkg[1] = pin;
+    pkg[0] = pin;
+    pkg[1] = GPIO_CTRL__WRITE;
     pkg[2] = value;
 
     if (write(fd, &pkg, 3) != 3) {
