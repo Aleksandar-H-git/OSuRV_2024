@@ -1,0 +1,62 @@
+
+#!/usr/bin/env python3
+# encoding: utf-8
+
+'''
+@author: Your Name <your.email@example.com>
+@license: MIT
+'''
+
+###############################################################################
+
+import os
+import glob
+import waflib
+
+###############################################################################
+
+one_file_programs = [
+    'wiper_limit_switch_node.c',
+]
+
+def options(opt):
+    opt.load('compiler_c')
+
+def configure(cfg):
+    cfg.load('compiler_c')
+    # Check for required libraries
+    cfg.check_cc(lib='zmq', uselib_store='ZMQ', mandatory=True)
+    cfg.check_cc(lib='pthread', uselib_store='PTHREAD', mandatory=True)
+    # Debugging flags
+    cfg.env.append_value('CFLAGS', ['-g', '-rdynamic'])
+    cfg.env.append_value('LINKFLAGS', ['-lzmq', '-lpthread'])
+    # Add include path from the driver and local include
+	
+    driver_include = cfg.srcnode.find_node('../../Driver/gpio_ctrl')
+    if driver_include:
+        cfg.env.INCLUDES_USER = [driver_include.abspath(), 'include']
+    else:
+        cfg.fatal('Driver include directory not found')
+
+def build(bld):
+    for source in one_file_programs:
+        target_name, _ = os.path.splitext(os.path.basename(source))
+        bld.program(
+            target=target_name,
+            source=source,
+            includes=bld.env.INCLUDES_USER,
+            use=['ZMQ', 'PTHREAD'],
+            install_path=False
+        )
+
+
+###############################################################################
+
+def exec_command2(self, cmd, **kw):
+    kw['stdout'] = None
+    kw['stderr'] = None
+    ret = self.exec_command(cmd, **kw)
+    if ret != 0:
+        self.fatal('Command "{}" returned {}'.format(cmd, ret))
+
+setattr(waflib.Context.Context, 'exec_command2', exec_command2)
